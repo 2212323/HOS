@@ -1,0 +1,202 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8">
+  <title>医院管理系统</title>
+  <style>
+    body {
+      font-family: Arial, sans-serif;
+      background-color: #f4f4f4;
+      margin: 0;
+      padding: 0;
+    }
+    h1 {
+      background-color: #4CAF50;
+      color: white;
+      text-align: center;
+      padding: 1rem 0;
+      margin: 0;
+      position: relative;
+    }
+    #userInfo {
+      text-align: right;
+      padding: 10px;
+      margin-right: 20px;
+      position: absolute;
+      top: 0;
+      right: 0;
+    }
+    #logoutButton {
+      background-color: #f44336;
+      color: white;
+      border: none;
+      padding: 10px 20px;
+      font-size: 14px;
+      cursor: pointer;
+      border-radius: 4px;
+      transition: background-color 0.3s ease;
+    }
+    #logoutButton:hover {
+      background-color: #d32f2f;
+    }
+    table {
+      width: 80%;
+      margin: 2rem auto;
+      border-collapse: collapse;
+      box-shadow: 0 2px 10px rgba(0, 0, 0, 0.1);
+      background-color: white;
+    }
+    th, td {
+      padding: 12px;
+      text-align: left;
+      border-bottom: 1px solid #ddd;
+    }
+    th {
+      background-color: #4CAF50;
+      color: white;
+    }
+    tr:hover {
+      background-color: #f1f1f1;
+    }
+    button {
+      background-color: #4CAF50;
+      color: white;
+      border: none;
+      padding: 10px 20px;
+      text-align: center;
+      text-decoration: none;
+      display: inline-block;
+      font-size: 14px;
+      margin: 4px 2px;
+      cursor: pointer;
+      border-radius: 4px;
+      transition: background-color 0.3s ease;
+    }
+    button:hover {
+      background-color: #45a049;
+    }
+  </style>
+  <script>
+    const backendUrl = 'http://127.0.0.1';
+
+    function checkLogin() {
+      return new Promise((resolve, reject) => {
+        const username = localStorage.getItem('loggedInUser');
+        if (!username) {
+          window.location.href = '/index.html'; // 未登录，重定向到登录页面
+          return;
+        }
+
+        fetch(`${backendUrl}/query?tableName=medicalstaff&condition=MID:${username}`)
+                .then(response => response.json())
+                .then(data => {
+                  if (data.length === 0) {
+                    window.location.href = 'index.html'; // 用户不存在，重定向到登录页面
+                    reject('用户不存在');
+                  } else {
+                    const user = data[0];
+                    document.getElementById('userInfo').innerHTML = `登录医生: ${user.Mname} (${user.MID}) <button id="logoutButton" onclick="logout()">退出登录</button>`;
+                    resolve();
+                  }
+                })
+                .catch(error => {
+                  console.error('Error:', error);
+                  reject(error);
+                });
+      });
+    }
+
+    window.onload = function() {
+      checkLogin().then(() => {
+        loadBeds();
+      }).catch(error => {
+        console.error('登录检查失败:', error);
+      });
+    }
+
+
+    function loadBeds() {
+      fetch(`${backendUrl}/query?tableName=bed&condition=1`)
+              .then(response => response.json())
+              .then(data => {
+                let table = document.getElementById('bedsTable');
+                table.innerHTML = `<tr><th>床名</th><th>病人ID</th><th>病人信息</th><th>操作</th></tr>`;
+                data.forEach(bed => {
+                  let row = table.insertRow();
+                  row.insertCell(0).innerText = bed.BedName;
+                  row.insertCell(1).innerText = bed.PID;
+                  row.insertCell(2).innerHTML = `<button onclick="loadPatientInfo(${bed.PID})">查看病人信息</button>`;
+                  row.insertCell(3).innerHTML = `<button onclick="changePatient('${bed.BedName}')">更改病人</button>`;
+
+                });
+              });
+    }
+
+    function loadPatientInfo(PID) {
+      fetch(`${backendUrl}/query?tableName=patient&condition=PID:${PID}`)
+              .then(response => response.json())
+              .then(data => {
+                let patient = data[0];
+                let patientInfo = `病人姓名: ${patient.Pname}\n年龄: ${patient.age}\n性别: ${patient.gender}\n入院日期: ${patient.admission_date}\n病情: ${patient.illness}\n过敏源: ${patient.allergen}`;
+
+                // 使用 alert 显示病人信息
+                alert(patientInfo);
+
+                // 使用 confirm 弹窗来询问是否查看医嘱信息
+                if (confirm("是否查看医嘱信息？")) {
+                  viewPrescriptions(PID);
+                }
+              });
+    }
+
+    function viewPrescriptions(PID) {
+      fetch(`${backendUrl}/query?tableName=medicalorder&condition=PID:${PID}`)
+              .then(response => response.json())
+              .then(data => {
+                let prescriptions = data.map(prescription =>
+                        `医嘱编号: ${prescription.MOID}\n` +
+                        `药物详情: ${prescription.MedicationDetails}\n` +
+                        `开始时间: ${prescription.StartTime}\n` +
+                        `结束时间: ${prescription.EndTime}\n` +
+                        `护理级别: ${prescription.NursingLevel}\n` +
+                        `类型: ${prescription.type}\n` +
+                        `状态: ${prescription.status}`
+                ).join('\n\n');alert(prescriptions);
+              });
+    }
+
+    function changePatient(bedName) {
+      let newPID = prompt('请输入新的病人ID:');
+      if (newPID) {
+        let url = `${backendUrl}/update?tableName=bed&data=PID:${newPID}&condition=BedName:"${bedName}"`;
+        fetch(url)
+                .then(response => response.json())
+                .then(result => {
+                  if (result) {
+                    alert('病人信息更新成功');
+                    loadBeds();
+                  } else {
+                    alert('病人信息更新失败');
+                  }
+                });
+      }
+    }
+
+    function logout() {
+      localStorage.removeItem('loggedInUser'); // 清除登录信息
+      window.location.href = '/index.html'; // 返回登录页面
+    }
+
+    window.onload = function() {
+      checkLogin().then(() => {
+        loadBeds();
+      });
+    }
+  </script>
+</head>
+<body>
+<h1>医院管理系统</h1>
+<div id="userInfo"></div>
+<table id="bedsTable"></table>
+</body>
+</html>
